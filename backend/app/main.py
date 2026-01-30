@@ -6,6 +6,7 @@ import sys
 
 from app.config import settings
 from app.database import init_db
+from app.collectors import GitHubCollector
 
 
 # Configure logging
@@ -64,3 +65,11 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+
+@app.post("/api/collect/github")
+async def run_github_collection():
+    """Manually trigger GitHub collection"""
+    collector = GitHubCollector()
+    result = await collector.run()
+    return result
