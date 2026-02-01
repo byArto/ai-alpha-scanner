@@ -387,6 +387,161 @@ class ProjectService:
         session.add(project)
         return "new"
 
+    async def save_projects_from_defillama(
+        self,
+        projects_data: List[Dict[str, Any]]
+    ) -> Dict[str, int]:
+        """Save projects from DeFiLlama to database"""
+        stats = {"new": 0, "updated": 0, "skipped": 0}
+
+        async with async_session_maker() as session:
+            for data in projects_data:
+                try:
+                    result = await self._save_defillama_project(session, data)
+                    stats[result] += 1
+                except Exception as e:
+                    logger.error(f"Error saving DeFiLlama project {data.get('name')}: {e}")
+                    stats["skipped"] += 1
+
+            await session.commit()
+
+        logger.info(f"Saved DeFiLlama projects: {stats}")
+        return stats
+
+    async def _save_defillama_project(
+        self,
+        session: AsyncSession,
+        data: Dict[str, Any]
+    ) -> str:
+        """Save or update DeFiLlama project"""
+        # Use 'manual' source type for DeFiLlama (or add DEFILLAMA to enum)
+        slug = self.generate_slug(data.get("name", "unknown"), "defillama")
+
+        result = await session.execute(
+            select(Project).where(Project.slug == slug)
+        )
+        existing = result.scalar_one_or_none()
+
+        if existing:
+            # Update metrics
+            if data.get("twitter_url") and not existing.twitter_url:
+                existing.twitter_url = data["twitter_url"]
+                existing.twitter_handle = self._extract_twitter_handle(data["twitter_url"])
+            if data.get("github_url") and not existing.github_url:
+                existing.github_url = data["github_url"]
+            if data.get("website_url") and not existing.website_url:
+                existing.website_url = data["website_url"]
+            existing.updated_at = datetime.utcnow()
+            return "updated"
+
+        # Detect category from DeFiLlama category
+        category = self._map_defillama_category(data.get("category"))
+
+        # Calculate score based on DeFiLlama data
+        score = self._calculate_defillama_score(data)
+
+        project = Project(
+            name=data.get("name", "Unknown"),
+            slug=slug,
+            description=data.get("description"),
+            source=ProjectSource.MANUAL,  # Using MANUAL for now
+            source_url=data.get("source_url"),
+
+            # Links
+            github_url=data.get("github_url"),
+            twitter_url=data.get("twitter_url"),
+            twitter_handle=self._extract_twitter_handle(data.get("twitter_url")),
+            website_url=data.get("website_url"),
+
+            # Analysis
+            category=category,
+            score=score,
+            confidence=0.4,  # Medium confidence from DeFiLlama
+
+            status=ProjectStatus.NEW
+        )
+
+        session.add(project)
+        return "new"
+
+    def _map_defillama_category(self, defi_category: Optional[str]) -> ProjectCategory:
+        """Map DeFiLlama category to our categories"""
+        if not defi_category:
+            return ProjectCategory.OTHER
+
+        cat_lower = defi_category.lower()
+
+        mapping = {
+            "dexes": ProjectCategory.DEFI,
+            "lending": ProjectCategory.DEFI,
+            "cdp": ProjectCategory.DEFI,
+            "bridge": ProjectCategory.INFRASTRUCTURE,
+            "yield": ProjectCategory.DEFI,
+            "derivatives": ProjectCategory.DEFI,
+            "liquid staking": ProjectCategory.DEFI,
+            "launchpad": ProjectCategory.INFRASTRUCTURE,
+            "gaming": ProjectCategory.GAMING,
+            "nft": ProjectCategory.NFT,
+            "oracle": ProjectCategory.INFRASTRUCTURE,
+            "privacy": ProjectCategory.INFRASTRUCTURE,
+            "payments": ProjectCategory.INFRASTRUCTURE,
+            "rwa": ProjectCategory.DEFI,
+            "options": ProjectCategory.DEFI,
+            "indexes": ProjectCategory.DEFI,
+            "synthetics": ProjectCategory.DEFI,
+            "insurance": ProjectCategory.DEFI,
+            "staking": ProjectCategory.DEFI,
+            "farm": ProjectCategory.DEFI,
+            "reserve currency": ProjectCategory.DEFI,
+            "algo-stables": ProjectCategory.DEFI,
+            "cross chain": ProjectCategory.INFRASTRUCTURE,
+        }
+
+        for key, value in mapping.items():
+            if key in cat_lower:
+                return value
+
+        return ProjectCategory.DEFI  # Default for DeFiLlama
+
+    def _calculate_defillama_score(self, data: Dict[str, Any]) -> float:
+        """Calculate score for DeFiLlama project"""
+        score = 5.0
+
+        tvl = data.get("tvl") or 0
+        early_signals = data.get("early_signals", [])
+
+        # TVL scoring (inverse - lower TVL = higher potential)
+        if tvl < 100_000:
+            score += 1.5  # Very early
+        elif tvl < 500_000:
+            score += 1.0
+        elif tvl < 1_000_000:
+            score += 0.5
+
+        # New chains bonus
+        if any("new_chains" in s for s in early_signals):
+            score += 1.0
+
+        # Recent listing bonus
+        if any("very_new" in s for s in early_signals):
+            score += 1.5
+        elif any("new:" in s for s in early_signals):
+            score += 0.75
+
+        # Funding signals
+        if any("recent_funding" in s for s in early_signals):
+            score += 1.0
+        if any("raised" in s for s in early_signals):
+            score += 0.5
+
+        # Has socials
+        if data.get("twitter_url"):
+            score += 0.3
+        if data.get("github_url"):
+            score += 0.5
+
+        return min(10.0, round(score, 1))
+
 
 # Singleton instance
 project_service = ProjectService()

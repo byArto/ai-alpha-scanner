@@ -7,7 +7,7 @@ import sys
 
 from app.config import settings
 from app.database import init_db
-from app.collectors import GitHubCollector, GalxeCollector, Layer3Collector, ZealyCollector
+from app.collectors import GitHubCollector, GalxeCollector, Layer3Collector, ZealyCollector, DefiLlamaCollector
 from app.services.project_service import project_service
 from app.models import ProjectSource, ProjectStatus, ProjectCategory
 
@@ -138,9 +138,23 @@ async def run_zealy_collection(save_to_db: bool = True):
     return result
 
 
+@app.post("/api/collect/defillama")
+async def run_defillama_collection(save_to_db: bool = True):
+    """Run DeFiLlama collection - free API, no auth required"""
+    collector = DefiLlamaCollector()
+    result = await collector.run()
+
+    if save_to_db and result["success"] and result["data"]:
+        stats = await project_service.save_projects_from_defillama(result["data"])
+        result["db_stats"] = stats
+
+    result["data"] = f"{len(result.get('data', []))} projects"
+    return result
+
+
 @app.post("/api/collect/all")
 async def run_all_collections(save_to_db: bool = True):
-    """Run all collectors"""
+    """Run all working collectors (GitHub + DeFiLlama)"""
     results = {}
 
     # GitHub
@@ -154,38 +168,14 @@ async def run_all_collections(save_to_db: bool = True):
     result["data"] = f"{len(result.get('data', []))} projects"
     results["github"] = result
 
-    # Galxe
-    collector = GalxeCollector()
+    # DeFiLlama
+    collector = DefiLlamaCollector()
     result = await collector.run()
     if save_to_db and result["success"] and result["data"]:
-        stats = await project_service.save_projects_from_testnet(
-            result["data"], ProjectSource.GALXE
-        )
+        stats = await project_service.save_projects_from_defillama(result["data"])
         result["db_stats"] = stats
     result["data"] = f"{len(result.get('data', []))} projects"
-    results["galxe"] = result
-
-    # Layer3
-    collector = Layer3Collector()
-    result = await collector.run()
-    if save_to_db and result["success"] and result["data"]:
-        stats = await project_service.save_projects_from_testnet(
-            result["data"], ProjectSource.LAYER3
-        )
-        result["db_stats"] = stats
-    result["data"] = f"{len(result.get('data', []))} projects"
-    results["layer3"] = result
-
-    # Zealy
-    collector = ZealyCollector()
-    result = await collector.run()
-    if save_to_db and result["success"] and result["data"]:
-        stats = await project_service.save_projects_from_testnet(
-            result["data"], ProjectSource.ZEALY
-        )
-        result["db_stats"] = stats
-    result["data"] = f"{len(result.get('data', []))} projects"
-    results["zealy"] = result
+    results["defillama"] = result
 
     # Get updated stats
     results["total_stats"] = await project_service.get_stats()
