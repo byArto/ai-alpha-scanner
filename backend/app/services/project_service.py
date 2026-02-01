@@ -311,6 +311,82 @@ class ProjectService:
                 "by_category": by_category
             }
 
+    async def save_projects_from_testnet(
+        self,
+        projects_data: List[Dict[str, Any]],
+        source: ProjectSource
+    ) -> Dict[str, int]:
+        """Save projects from testnet platforms to database"""
+        stats = {"new": 0, "updated": 0, "skipped": 0}
+
+        async with async_session_maker() as session:
+            for data in projects_data:
+                try:
+                    result = await self._save_testnet_project(session, data, source)
+                    stats[result] += 1
+                except Exception as e:
+                    logger.error(f"Error saving testnet project {data.get('name')}: {e}")
+                    stats["skipped"] += 1
+
+            await session.commit()
+
+        logger.info(f"Saved testnet projects: {stats}")
+        return stats
+
+    async def _save_testnet_project(
+        self,
+        session: AsyncSession,
+        data: Dict[str, Any],
+        source: ProjectSource
+    ) -> str:
+        """Save or update single testnet project"""
+        slug = self.generate_slug(data.get("name", "unknown"), source.value)
+
+        # Check if exists
+        result = await session.execute(
+            select(Project).where(Project.slug == slug)
+        )
+        existing = result.scalar_one_or_none()
+
+        if existing:
+            # Update with testnet data
+            if data.get("twitter_url") and not existing.twitter_url:
+                existing.twitter_url = data["twitter_url"]
+                existing.twitter_handle = self._extract_twitter_handle(data["twitter_url"])
+            if data.get("discord_url") and not existing.discord_url:
+                existing.discord_url = data["discord_url"]
+            if data.get("website_url") and not existing.website_url:
+                existing.website_url = data["website_url"]
+            existing.updated_at = datetime.utcnow()
+            return "updated"
+
+        # Create new
+        category = self.detect_category(data)
+
+        project = Project(
+            name=data.get("name", "Unknown"),
+            slug=slug,
+            description=data.get("description"),
+            source=source,
+            source_url=data.get("source_url"),
+
+            # Social links
+            twitter_url=data.get("twitter_url"),
+            twitter_handle=self._extract_twitter_handle(data.get("twitter_url")),
+            website_url=data.get("website_url"),
+            discord_url=data.get("discord_url"),
+
+            # Analysis
+            category=category,
+            score=5.0,  # Base score for testnet projects
+            confidence=0.2,
+
+            status=ProjectStatus.NEW
+        )
+
+        session.add(project)
+        return "new"
+
 
 # Singleton instance
 project_service = ProjectService()

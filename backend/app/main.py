@@ -7,7 +7,7 @@ import sys
 
 from app.config import settings
 from app.database import init_db
-from app.collectors import GitHubCollector
+from app.collectors import GitHubCollector, GalxeCollector, Layer3Collector, ZealyCollector
 from app.services.project_service import project_service
 from app.models import ProjectSource, ProjectStatus, ProjectCategory
 
@@ -85,6 +85,112 @@ async def run_github_collection(save_to_db: bool = True):
     result["data"] = f"{len(result.get('data', []))} projects"
 
     return result
+
+
+@app.post("/api/collect/galxe")
+async def run_galxe_collection(save_to_db: bool = True):
+    """Run Galxe collection"""
+    collector = GalxeCollector()
+    result = await collector.run()
+
+    if save_to_db and result["success"] and result["data"]:
+        stats = await project_service.save_projects_from_testnet(
+            result["data"],
+            ProjectSource.GALXE
+        )
+        result["db_stats"] = stats
+
+    result["data"] = f"{len(result.get('data', []))} projects"
+    return result
+
+
+@app.post("/api/collect/layer3")
+async def run_layer3_collection(save_to_db: bool = True):
+    """Run Layer3 collection"""
+    collector = Layer3Collector()
+    result = await collector.run()
+
+    if save_to_db and result["success"] and result["data"]:
+        stats = await project_service.save_projects_from_testnet(
+            result["data"],
+            ProjectSource.LAYER3
+        )
+        result["db_stats"] = stats
+
+    result["data"] = f"{len(result.get('data', []))} projects"
+    return result
+
+
+@app.post("/api/collect/zealy")
+async def run_zealy_collection(save_to_db: bool = True):
+    """Run Zealy collection"""
+    collector = ZealyCollector()
+    result = await collector.run()
+
+    if save_to_db and result["success"] and result["data"]:
+        stats = await project_service.save_projects_from_testnet(
+            result["data"],
+            ProjectSource.ZEALY
+        )
+        result["db_stats"] = stats
+
+    result["data"] = f"{len(result.get('data', []))} projects"
+    return result
+
+
+@app.post("/api/collect/all")
+async def run_all_collections(save_to_db: bool = True):
+    """Run all collectors"""
+    results = {}
+
+    # GitHub
+    collector = GitHubCollector()
+    result = await collector.run()
+    if save_to_db and result["success"] and result["data"]:
+        stats = await project_service.save_projects_from_collector(
+            result["data"], ProjectSource.GITHUB
+        )
+        result["db_stats"] = stats
+    result["data"] = f"{len(result.get('data', []))} projects"
+    results["github"] = result
+
+    # Galxe
+    collector = GalxeCollector()
+    result = await collector.run()
+    if save_to_db and result["success"] and result["data"]:
+        stats = await project_service.save_projects_from_testnet(
+            result["data"], ProjectSource.GALXE
+        )
+        result["db_stats"] = stats
+    result["data"] = f"{len(result.get('data', []))} projects"
+    results["galxe"] = result
+
+    # Layer3
+    collector = Layer3Collector()
+    result = await collector.run()
+    if save_to_db and result["success"] and result["data"]:
+        stats = await project_service.save_projects_from_testnet(
+            result["data"], ProjectSource.LAYER3
+        )
+        result["db_stats"] = stats
+    result["data"] = f"{len(result.get('data', []))} projects"
+    results["layer3"] = result
+
+    # Zealy
+    collector = ZealyCollector()
+    result = await collector.run()
+    if save_to_db and result["success"] and result["data"]:
+        stats = await project_service.save_projects_from_testnet(
+            result["data"], ProjectSource.ZEALY
+        )
+        result["db_stats"] = stats
+    result["data"] = f"{len(result.get('data', []))} projects"
+    results["zealy"] = result
+
+    # Get updated stats
+    results["total_stats"] = await project_service.get_stats()
+
+    return results
 
 
 # ============ Projects Endpoints ============
