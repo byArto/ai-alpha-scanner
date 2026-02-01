@@ -542,6 +542,67 @@ class ProjectService:
 
         return min(10.0, round(score, 1))
 
+    async def get_projects_for_analysis(
+        self,
+        limit: int = 10,
+        min_score: float = 5.0
+    ) -> List[Project]:
+        """Get projects that need AI analysis"""
+        async with async_session_maker() as session:
+            query = select(Project).where(
+                Project.status == ProjectStatus.NEW,
+                Project.score >= min_score,
+                Project.analyzed_at.is_(None)
+            ).order_by(Project.score.desc()).limit(limit)
+
+            result = await session.execute(query)
+            return result.scalars().all()
+
+    async def save_analysis_result(
+        self,
+        project_id: int,
+        analysis: Dict[str, Any]
+    ) -> bool:
+        """Save AI analysis result to project"""
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(Project).where(Project.id == project_id)
+            )
+            project = result.scalar_one_or_none()
+
+            if not project:
+                return False
+
+            # Update with analysis results
+            if analysis.get("summary"):
+                project.summary = analysis["summary"]
+
+            if analysis.get("why_early"):
+                project.why_early = analysis["why_early"]
+
+            if analysis.get("category"):
+                try:
+                    project.category = ProjectCategory(analysis["category"])
+                except ValueError:
+                    pass
+
+            if analysis.get("score") is not None:
+                project.score = analysis["score"]
+
+            if analysis.get("confidence") is not None:
+                project.confidence = analysis["confidence"]
+
+            if analysis.get("red_flags"):
+                project.red_flags = analysis["red_flags"]
+
+            # Update status
+            project.status = ProjectStatus.ANALYZED
+            project.analyzed_at = datetime.utcnow()
+
+            await session.commit()
+            logger.info(f"Saved analysis for project {project.name}")
+            return True
+
 
 # Singleton instance
 project_service = ProjectService()

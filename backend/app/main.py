@@ -5,11 +5,14 @@ from typing import Optional
 from loguru import logger
 import sys
 
+from sqlalchemy import select
+
 from app.config import settings
-from app.database import init_db
+from app.database import init_db, async_session_maker
 from app.collectors import GitHubCollector, GalxeCollector, Layer3Collector, ZealyCollector, DefiLlamaCollector
 from app.services.project_service import project_service
-from app.models import ProjectSource, ProjectStatus, ProjectCategory
+from app.models import Project, ProjectSource, ProjectStatus, ProjectCategory
+from app.analyzers import AIAnalyzer
 
 
 # Configure logging
@@ -277,3 +280,141 @@ async def get_project(slug: str):
 async def get_stats():
     """Get database statistics"""
     return await project_service.get_stats()
+
+
+# ============ Analysis Endpoints ============
+
+@app.get("/api/analysis/pending")
+async def get_pending_analysis(limit: int = 10, min_score: float = 5.0):
+    """Get projects that need AI analysis"""
+    projects = await project_service.get_projects_for_analysis(
+        limit=limit,
+        min_score=min_score
+    )
+
+    return {
+        "count": len(projects),
+        "projects": [
+            {
+                "id": p.id,
+                "name": p.name,
+                "slug": p.slug,
+                "description": p.description,
+                "source": p.source.value,
+                "score": p.score,
+                "github_url": p.github_url,
+                "github_stars": p.github_stars
+            }
+            for p in projects
+        ]
+    }
+
+
+@app.get("/api/analysis/prompt/{project_id}")
+async def generate_analysis_prompt(project_id: int):
+    """Generate AI analysis prompt for a project"""
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(Project).where(Project.id == project_id)
+        )
+        project = result.scalar_one_or_none()
+
+        if not project:
+            return {"error": "Project not found"}
+
+        # Convert to dict for prompt generation
+        project_data = {
+            "name": project.name,
+            "description": project.description,
+            "source": project.source.value,
+            "github_url": project.github_url,
+            "github_org": project.github_org,
+            "github_stars": project.github_stars,
+            "github_forks": project.github_forks,
+            "github_commits_30d": project.github_commits_30d,
+            "github_contributors": project.github_contributors,
+            "github_language": project.github_language,
+            "github_created_at": project.github_created_at.isoformat() if project.github_created_at else None,
+            "twitter_url": project.twitter_url,
+            "discord_url": project.discord_url,
+            "website_url": project.website_url,
+            "category": project.category.value if project.category else None,
+            "score": project.score
+        }
+
+        analyzer = AIAnalyzer()
+        prompt = analyzer.generate_analysis_prompt(project_data)
+
+        return {
+            "project_id": project_id,
+            "project_name": project.name,
+            "prompt": prompt
+        }
+
+
+@app.post("/api/analysis/save/{project_id}")
+async def save_analysis(project_id: int, response_text: str):
+    """Parse AI response and save analysis result"""
+    analyzer = AIAnalyzer()
+
+    # Parse the response
+    analysis = analyzer.parse_analysis_response(response_text)
+
+    if not analyzer.validate_analysis(analysis):
+        return {
+            "success": False,
+            "error": "Could not parse required fields from response",
+            "parsed": analysis
+        }
+
+    # Save to database
+    success = await project_service.save_analysis_result(project_id, analysis)
+
+    return {
+        "success": success,
+        "project_id": project_id,
+        "analysis": {
+            "summary": analysis.get("summary"),
+            "why_early": analysis.get("why_early"),
+            "category": analysis.get("category"),
+            "score": analysis.get("score"),
+            "confidence": analysis.get("confidence"),
+            "red_flags": analysis.get("red_flags"),
+            "recommendation": analysis.get("recommendation")
+        }
+    }
+
+
+@app.get("/api/analysis/batch-prompt")
+async def generate_batch_prompt(limit: int = 5, min_score: float = 6.0):
+    """Generate batch analysis prompt for multiple projects"""
+    projects = await project_service.get_projects_for_analysis(
+        limit=limit,
+        min_score=min_score
+    )
+
+    if not projects:
+        return {"error": "No projects found for analysis"}
+
+    projects_data = [
+        {
+            "name": p.name,
+            "description": p.description,
+            "source": p.source.value,
+            "github_stars": p.github_stars,
+            "github_commits_30d": p.github_commits_30d,
+            "category": p.category.value if p.category else None,
+            "score": p.score
+        }
+        for p in projects
+    ]
+
+    analyzer = AIAnalyzer()
+    prompt = analyzer.generate_batch_prompt(projects_data)
+
+    return {
+        "count": len(projects),
+        "project_ids": [p.id for p in projects],
+        "project_names": [p.name for p in projects],
+        "prompt": prompt
+    }
