@@ -1,0 +1,160 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
+@import "tailwindcss";
+
+@theme inline {
+  /* Cyber color palette */
+  --color-cyber-bg: #0a0a0f;
+  --color-cyber-bg-secondary: #12121a;
+  --color-cyber-bg-tertiary: #1a1a25;
+  --color-cyber-border: #2a2a3a;
+
+  --color-cyber-green: #00ff88;
+  --color-cyber-cyan: #00d4ff;
+  --color-cyber-purple: #a855f7;
+  --color-cyber-red: #ff3366;
+  --color-cyber-yellow: #ffd700;
+
+  /* Fonts */
+  --font-sans: 'Outfit', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Animations */
+  --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-glow: glow 2s ease-in-out infinite alternate;
+
+  @keyframes glow {
+    0% { box-shadow: 0 0 5px #00ff8844, 0 0 10px #00ff8822; }
+    100% { box-shadow: 0 0 20px #00ff8844, 0 0 40px #00ff8822; }
+  }
+}
+
+/* Scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a3a #0a0a0f;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: #0a0a0f;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #2a2a3a;
+  border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #00ff88;
+}
+
+body {
+  font-family: 'Outfit', sans-serif;
+  background: #0a0a0f;
+  color: #e0e0e8;
+  min-height: 100vh;
+}
+
+/* Scanline effect */
+.scanline {
+  position: relative;
+  overflow: hidden;
+}
+
+.scanline::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    transparent 50%,
+    rgba(0, 255, 136, 0.02) 50%
+  );
+  background-size: 100% 4px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.scanline:hover::after {
+  opacity: 1;
+}
+
+/* Glow effects */
+.glow-green {
+  box-shadow: 0 0 20px #00ff8844, 0 0 40px #00ff8822;
+}
+
+.glow-cyan {
+  box-shadow: 0 0 20px #00d4ff44, 0 0 40px #00d4ff22;
+}
+
+.text-glow-green {
+  text-shadow: 0 0 10px #00ff88;
+}
+
+.text-glow-cyan {
+  text-shadow: 0 0 10px #00d4ff;
+}
+
+/* Grid background */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(0, 255, 136, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 136, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+}
+
+/* Card styles */
+.cyber-card {
+  background: #12121a;
+  border: 1px solid #2a2a3a;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.cyber-card:hover {
+  border-color: #00ff88;
+  box-shadow: 0 0 20px #00ff8844, 0 0 40px #00ff8822;
+}
+
+/* Badge styles */
+.cyber-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Pulse animation */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Score bar */
+.score-bar {
+  height: 4px;
+  background: #1a1a25;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.score-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
