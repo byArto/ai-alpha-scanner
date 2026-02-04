@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -13,6 +13,7 @@ from app.collectors import GitHubCollector, GalxeCollector, Layer3Collector, Zea
 from app.services.project_service import project_service
 from app.models import Project, ProjectSource, ProjectStatus, ProjectCategory
 from app.analyzers import AIAnalyzer
+from app.scheduler import scheduler
 
 
 # Configure logging
@@ -32,10 +33,22 @@ logger.add(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Startup
     logger.info("Starting AI Alpha Scanner...")
     await init_db()
     logger.info("Database initialized")
+
+    # Start scheduler (only in production or if explicitly enabled)
+    if settings.app_env == "production":
+        scheduler.start()
+        logger.info("Scheduler started (production mode)")
+    else:
+        logger.info("Scheduler not started (development mode) - use /api/scheduler/start to enable")
+
     yield
+
+    # Shutdown
+    scheduler.stop()
     logger.info("Shutting down...")
 
 
@@ -55,6 +68,8 @@ app.add_middleware(
 )
 
 
+# ============ Basic Endpoints ============
+
 @app.get("/")
 async def root():
     return {
@@ -73,7 +88,7 @@ async def health_check():
 
 @app.post("/api/collect/github")
 async def run_github_collection(save_to_db: bool = True):
-    """Run GitHub collection and optionally save to database"""
+    """Run GitHub collection"""
     collector = GitHubCollector()
     result = await collector.run()
 
@@ -84,9 +99,7 @@ async def run_github_collection(save_to_db: bool = True):
         )
         result["db_stats"] = stats
 
-    # Don't return raw data in response (too large)
     result["data"] = f"{len(result.get('data', []))} projects"
-
     return result
 
 
@@ -143,7 +156,7 @@ async def run_zealy_collection(save_to_db: bool = True):
 
 @app.post("/api/collect/defillama")
 async def run_defillama_collection(save_to_db: bool = True):
-    """Run DeFiLlama collection - free API, no auth required"""
+    """Run DeFiLlama collection"""
     collector = DefiLlamaCollector()
     result = await collector.run()
 
@@ -180,9 +193,7 @@ async def run_all_collections(save_to_db: bool = True):
     result["data"] = f"{len(result.get('data', []))} projects"
     results["defillama"] = result
 
-    # Get updated stats
     results["total_stats"] = await project_service.get_stats()
-
     return results
 
 
@@ -198,7 +209,6 @@ async def get_projects(
     offset: int = 0
 ):
     """Get list of projects with filters"""
-    # Convert string params to enums
     status_enum = ProjectStatus(status) if status else None
     category_enum = ProjectCategory(category) if category else None
     source_enum = ProjectSource(source) if source else None
@@ -286,7 +296,7 @@ async def get_stats():
 
 @app.get("/api/analysis/pending")
 async def get_pending_analysis(limit: int = 10, min_score: float = 5.0):
-    """Get projects that need AI analysis"""
+    """Get projects pending AI analysis"""
     projects = await project_service.get_projects_for_analysis(
         limit=limit,
         min_score=min_score
@@ -319,70 +329,70 @@ async def generate_analysis_prompt(project_id: int):
         )
         project = result.scalar_one_or_none()
 
-        if not project:
-            return {"error": "Project not found"}
+    if not project:
+        return {"error": "Project not found"}
 
-        # Convert to dict for prompt generation
-        project_data = {
-            "name": project.name,
-            "description": project.description,
-            "source": project.source.value,
-            "github_url": project.github_url,
-            "github_org": project.github_org,
-            "github_stars": project.github_stars,
-            "github_forks": project.github_forks,
-            "github_commits_30d": project.github_commits_30d,
-            "github_contributors": project.github_contributors,
-            "github_language": project.github_language,
-            "github_created_at": project.github_created_at.isoformat() if project.github_created_at else None,
-            "twitter_url": project.twitter_url,
-            "discord_url": project.discord_url,
-            "website_url": project.website_url,
-            "category": project.category.value if project.category else None,
-            "score": project.score
-        }
+    analyzer = AIAnalyzer()
 
-        analyzer = AIAnalyzer()
-        prompt = analyzer.generate_analysis_prompt(project_data)
+    project_data = {
+        "name": project.name,
+        "description": project.description,
+        "source": project.source.value,
+        "source_url": project.source_url,
+        "github_url": project.github_url,
+        "github_org": project.github_org,
+        "github_stars": project.github_stars,
+        "github_forks": project.github_forks,
+        "github_commits_30d": project.github_commits_30d,
+        "github_contributors": project.github_contributors,
+        "github_language": project.github_language,
+        "github_created_at": project.github_created_at.isoformat() if project.github_created_at else None,
+        "twitter_url": project.twitter_url,
+        "discord_url": project.discord_url,
+        "website_url": project.website_url,
+        "category": project.category.value if project.category else None,
+        "score": project.score
+    }
 
-        return {
-            "project_id": project_id,
-            "project_name": project.name,
-            "prompt": prompt
-        }
+    prompt = analyzer.generate_analysis_prompt(project_data)
+
+    return {
+        "project_id": project.id,
+        "project_name": project.name,
+        "prompt": prompt,
+        "instructions": "Copy this prompt to Claude UI, get the response, then POST to /api/analysis/save/{project_id}"
+    }
 
 
 @app.post("/api/analysis/save/{project_id}")
-async def save_analysis(project_id: int, response_text: str):
-    """Parse AI response and save analysis result"""
+async def save_analysis(project_id: int, response_text: str = Body(..., embed=True)):
+    """Parse and save AI analysis response"""
     analyzer = AIAnalyzer()
 
-    # Parse the response
     analysis = analyzer.parse_analysis_response(response_text)
 
     if not analyzer.validate_analysis(analysis):
         return {
-            "success": False,
-            "error": "Could not parse required fields from response",
+            "error": "Could not parse analysis. Make sure response follows the expected format.",
             "parsed": analysis
         }
 
-    # Save to database
     success = await project_service.save_analysis_result(project_id, analysis)
 
-    return {
-        "success": success,
-        "project_id": project_id,
-        "analysis": {
-            "summary": analysis.get("summary"),
-            "why_early": analysis.get("why_early"),
-            "category": analysis.get("category"),
-            "score": analysis.get("score"),
-            "confidence": analysis.get("confidence"),
-            "red_flags": analysis.get("red_flags"),
-            "recommendation": analysis.get("recommendation")
+    if success:
+        return {
+            "success": True,
+            "project_id": project_id,
+            "analysis": {
+                "summary": analysis.get("summary"),
+                "score": analysis.get("score"),
+                "confidence": analysis.get("confidence"),
+                "category": analysis.get("category"),
+                "recommendation": analysis.get("recommendation")
+            }
         }
-    }
+    else:
+        return {"error": "Failed to save analysis"}
 
 
 @app.get("/api/analysis/batch-prompt")
@@ -394,7 +404,9 @@ async def generate_batch_prompt(limit: int = 5, min_score: float = 6.0):
     )
 
     if not projects:
-        return {"error": "No projects found for analysis"}
+        return {"error": "No projects pending analysis"}
+
+    analyzer = AIAnalyzer()
 
     projects_data = [
         {
@@ -409,12 +421,50 @@ async def generate_batch_prompt(limit: int = 5, min_score: float = 6.0):
         for p in projects
     ]
 
-    analyzer = AIAnalyzer()
     prompt = analyzer.generate_batch_prompt(projects_data)
 
     return {
-        "count": len(projects),
+        "project_count": len(projects),
         "project_ids": [p.id for p in projects],
         "project_names": [p.name for p in projects],
         "prompt": prompt
     }
+
+
+# ============ Scheduler Endpoints ============
+
+@app.get("/api/scheduler/status")
+async def get_scheduler_status():
+    """Get scheduler status and jobs"""
+    return {
+        "is_running": scheduler._is_running,
+        "jobs": scheduler.get_jobs_status()
+    }
+
+
+@app.post("/api/scheduler/start")
+async def start_scheduler():
+    """Start the scheduler"""
+    if scheduler._is_running:
+        return {"message": "Scheduler already running", "jobs": scheduler.get_jobs_status()}
+
+    scheduler.start()
+    return {"message": "Scheduler started", "jobs": scheduler.get_jobs_status()}
+
+
+@app.post("/api/scheduler/stop")
+async def stop_scheduler():
+    """Stop the scheduler"""
+    if not scheduler._is_running:
+        return {"message": "Scheduler not running"}
+
+    scheduler.stop()
+    return {"message": "Scheduler stopped"}
+
+
+@app.post("/api/scheduler/run-now")
+async def run_collections_now():
+    """Manually trigger all collections"""
+    await scheduler.run_all_collections()
+    stats = await project_service.get_stats()
+    return {"message": "Collections completed", "stats": stats}
