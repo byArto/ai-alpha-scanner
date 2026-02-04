@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Activity, Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { Wifi, WifiOff, RefreshCw, Terminal, Clock } from 'lucide-react';
 import { getSchedulerStatus, triggerCollection } from '@/lib/api';
 
 export default function Header() {
   const [isOnline, setIsOnline] = useState(false);
   const [isCollecting, setIsCollecting] = useState(false);
   const [currentTime, setCurrentTime] = useState('');
+  const [currentDate, setCurrentDate] = useState('');
 
   useEffect(() => {
     const checkStatus = async () => {
@@ -23,12 +24,18 @@ export default function Header() {
     const interval = setInterval(checkStatus, 30000);
 
     const updateTime = () => {
-      setCurrentTime(new Date().toLocaleTimeString('en-US', {
+      const now = new Date();
+      setCurrentTime(now.toLocaleTimeString('en-US', {
         hour12: false,
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit'
       }));
+      setCurrentDate(now.toLocaleDateString('en-US', {
+        month: 'short',
+        day: '2-digit',
+        year: 'numeric'
+      }).toUpperCase());
     };
     updateTime();
     const timeInterval = setInterval(updateTime, 1000);
@@ -50,39 +57,59 @@ export default function Header() {
   };
 
   return (
-    <header className="h-14 border-b border-cyber-border bg-cyber-bg-secondary/80 backdrop-blur-sm flex items-center justify-between px-6">
-      {/* Left: Status */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
-          {isOnline ? (
-            <Wifi className="w-4 h-4 text-cyber-green" />
-          ) : (
-            <WifiOff className="w-4 h-4 text-cyber-red" />
-          )}
-          <span className={`text-xs font-mono ${isOnline ? 'text-cyber-green' : 'text-cyber-red'}`}>
-            {isOnline ? 'CONNECTED' : 'OFFLINE'}
+    <header className="h-12 border-b border-border-dim bg-abyss/90 backdrop-blur-md flex items-center justify-between px-5 relative z-10">
+      {/* Left: breadcrumb + status */}
+      <div className="flex items-center gap-5">
+        {/* Terminal indicator */}
+        <div className="flex items-center gap-1.5">
+          <Terminal className="w-3.5 h-3.5 text-text-ghost" />
+          <span className="text-[11px] font-mono text-text-ghost">
+            alpha-scanner
+          </span>
+          <span className="text-text-ghost/40 text-[11px]">/</span>
+          <span className="text-[11px] font-mono text-text-secondary typing-cursor pr-1">
+            live
           </span>
         </div>
 
-        <div className="h-4 w-px bg-cyber-border" />
+        <div className="h-3 w-px bg-border-dim" />
 
-        <div className="flex items-center gap-2 text-gray-500">
-          <Activity className="w-4 h-4" />
-          <span className="text-xs font-mono">{currentTime} UTC</span>
+        {/* Connection status */}
+        <div className="flex items-center gap-1.5">
+          {isOnline ? (
+            <Wifi className="w-3.5 h-3.5 text-neon" />
+          ) : (
+            <WifiOff className="w-3.5 h-3.5 text-heat" />
+          )}
+          <span className={`text-[10px] font-mono tracking-wider ${isOnline ? 'text-neon' : 'text-heat'}`}>
+            {isOnline ? 'ONLINE' : 'OFFLINE'}
+          </span>
         </div>
       </div>
 
-      {/* Right: Actions */}
-      <div className="flex items-center gap-3">
+      {/* Right: time + actions */}
+      <div className="flex items-center gap-4">
+        {/* Date/Time */}
+        <div className="flex items-center gap-2 text-text-ghost">
+          <Clock className="w-3.5 h-3.5" />
+          <span className="text-[11px] font-mono tabular-nums">
+            {currentDate}
+          </span>
+          <span className="text-neon/60 text-[11px] font-mono tabular-nums">
+            {currentTime}
+          </span>
+        </div>
+
+        <div className="h-3 w-px bg-border-dim" />
+
+        {/* Scan button */}
         <button
           onClick={handleRefresh}
           disabled={isCollecting}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-cyber-bg-tertiary border border-cyber-border hover:border-cyber-cyan transition-all text-sm disabled:opacity-50 cursor-pointer"
+          className="cyber-btn flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          <RefreshCw className={`w-4 h-4 text-cyber-cyan ${isCollecting ? 'animate-spin' : ''}`} />
-          <span className="font-mono text-xs">
-            {isCollecting ? 'SCANNING...' : 'SCAN NOW'}
-          </span>
+          <RefreshCw className={`w-3.5 h-3.5 text-ice ${isCollecting ? 'animate-spin' : ''}`} />
+          <span>{isCollecting ? 'SCANNING' : 'SCAN NOW'}</span>
         </button>
       </div>
     </header>

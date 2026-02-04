@@ -15,10 +15,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased">
+      <body className="antialiased noise-overlay">
         <div className="flex min-h-screen grid-bg">
           <Sidebar />
-          <main className="flex-1 ml-64">
+          <main className="flex-1 ml-[260px] relative z-[1]">
             <Header />
             <div className="p-6">
               {children}

@@ -5,10 +5,17 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, Github, Twitter, Globe, Star, GitCommit,
-  Users, Calendar, ExternalLink, Shield
+  Users, Calendar, ExternalLink, Shield, AlertTriangle, Scan
 } from 'lucide-react';
 import clsx from 'clsx';
 import { fetchProject, ProjectDetail } from '@/lib/api';
+
+function getScoreVisuals(score: number) {
+  if (score >= 8) return { color: 'text-neon', glow: 'text-glow-neon', bg: 'bg-neon', ring: 'border-neon/30' };
+  if (score >= 6) return { color: 'text-ice', glow: 'text-glow-ice', bg: 'bg-ice', ring: 'border-ice/30' };
+  if (score >= 4) return { color: 'text-solar', glow: '', bg: 'bg-solar', ring: 'border-solar/30' };
+  return { color: 'text-text-ghost', glow: '', bg: 'bg-text-ghost', ring: 'border-border-dim' };
+}
 
 export default function ProjectDetailPage() {
   const params = useParams();
@@ -31,97 +38,100 @@ export default function ProjectDetailPage() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="cyber-card p-6 animate-pulse">
-          <div className="h-48 bg-cyber-bg-tertiary rounded" />
-        </div>
+      <div className="space-y-5">
+        {[1, 2].map(i => (
+          <div key={i} className="cyber-card p-6 animate-pulse">
+            <div className="h-40 bg-elevated/30 rounded" />
+          </div>
+        ))}
       </div>
     );
   }
 
   if (!project) {
     return (
-      <div className="cyber-card p-12 text-center">
-        <p className="text-gray-500 font-mono">PROJECT NOT FOUND</p>
-        <Link href="/projects" className="text-cyber-cyan text-sm mt-4 inline-block">
+      <div className="cyber-card p-14 text-center">
+        <Scan className="w-10 h-10 text-border-mid mx-auto mb-3" />
+        <p className="text-text-ghost font-mono text-sm">PROJECT NOT FOUND</p>
+        <Link href="/projects" className="text-ice text-sm mt-3 inline-block hover:underline">
           Back to Projects
         </Link>
       </div>
     );
   }
 
-  const scoreColor = project.score >= 8
-    ? 'text-cyber-green'
-    : project.score >= 6
-      ? 'text-cyber-cyan'
-      : project.score >= 4
-        ? 'text-cyber-yellow'
-        : 'text-gray-500';
+  const sv = getScoreVisuals(project.score);
 
   return (
-    <div className="space-y-6">
-      {/* Back */}
+    <div className="space-y-5">
+      {/* Back nav */}
       <Link
         href="/projects"
-        className="inline-flex items-center gap-2 text-gray-400 hover:text-cyber-cyan transition-colors text-sm"
+        className="inline-flex items-center gap-2 text-text-ghost hover:text-ice transition-colors duration-200 text-sm animate-in"
       >
-        <ArrowLeft className="w-4 h-4" />
-        <span className="font-mono">BACK TO PROJECTS</span>
+        <ArrowLeft className="w-3.5 h-3.5" />
+        <span className="font-mono text-[11px] tracking-wider">PROJECTS</span>
       </Link>
 
-      {/* Header */}
-      <div className="cyber-card p-6">
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-white mb-2">{project.name}</h1>
-            <div className="flex items-center gap-3 mb-4">
+      {/* Main header card */}
+      <div className="cyber-card p-6 animate-in delay-1">
+        <div className="flex items-start justify-between gap-6">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-2xl font-bold text-text-primary tracking-tight mb-2 glitch-hover">
+              {project.name}
+            </h1>
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
               {project.category && (
-                <span className="cyber-badge bg-cyber-purple/20 text-cyber-purple border border-cyber-purple/30">
+                <span className="cyber-badge bg-phantom/10 text-phantom border border-phantom/20">
                   {project.category}
                 </span>
               )}
-              <span className="cyber-badge bg-cyber-bg-tertiary text-gray-400 border border-cyber-border">
+              <span className="cyber-badge bg-elevated text-text-ghost border border-border-dim">
                 {project.source}
               </span>
               <span className={clsx(
                 'cyber-badge border',
                 project.status === 'analyzed'
-                  ? 'bg-cyber-green/20 text-cyber-green border-cyber-green/30'
-                  : 'bg-cyber-yellow/20 text-cyber-yellow border-cyber-yellow/30'
+                  ? 'bg-neon/10 text-neon border-neon/20'
+                  : 'bg-solar/10 text-solar border-solar/20'
               )}>
                 {project.status}
               </span>
             </div>
-            <p className="text-gray-400 max-w-2xl">
+            <p className="text-text-secondary text-sm leading-relaxed max-w-2xl">
               {project.description || 'No description available'}
             </p>
           </div>
 
-          <div className="text-right">
-            <div className={clsx('text-5xl font-bold font-mono', scoreColor)}>
+          {/* Score display */}
+          <div className={clsx(
+            'flex-shrink-0 w-24 h-24 rounded-lg border flex flex-col items-center justify-center',
+            'bg-void/80',
+            sv.ring
+          )}>
+            <span className={clsx('text-4xl font-bold font-mono leading-none', sv.color, sv.glow)}>
               {project.score.toFixed(1)}
-            </div>
-            <div className="text-sm text-gray-500 font-mono mt-1">
-              SCORE / 10
-            </div>
-            <div className="text-xs text-gray-600 font-mono mt-1">
-              conf: {(project.confidence * 100).toFixed(0)}%
+            </span>
+            <div className="text-[9px] font-mono text-text-ghost mt-1 tracking-wider">SCORE / 10</div>
+            <div className="text-[9px] font-mono text-text-ghost/60 mt-0.5">
+              CONF {(project.confidence * 100).toFixed(0)}%
             </div>
           </div>
         </div>
 
-        {/* Links */}
-        <div className="flex items-center gap-3 mt-6 pt-4 border-t border-cyber-border">
+        {/* External links */}
+        <div className="cyber-divider my-5" />
+        <div className="flex items-center gap-2 flex-wrap">
           {project.github_url && (
             <a
               href={project.github_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-cyber-bg-tertiary border border-cyber-border hover:border-cyber-green transition-all text-sm"
+              className="cyber-btn flex items-center gap-2"
             >
-              <Github className="w-4 h-4" />
-              <span className="font-mono">GitHub</span>
-              <ExternalLink className="w-3 h-3 text-gray-600" />
+              <Github className="w-3.5 h-3.5" />
+              <span>GITHUB</span>
+              <ExternalLink className="w-3 h-3 text-text-ghost" />
             </a>
           )}
           {project.twitter_url && (
@@ -129,11 +139,11 @@ export default function ProjectDetailPage() {
               href={project.twitter_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-cyber-bg-tertiary border border-cyber-border hover:border-cyber-cyan transition-all text-sm"
+              className="cyber-btn flex items-center gap-2"
             >
-              <Twitter className="w-4 h-4" />
-              <span className="font-mono">{project.twitter_handle || 'Twitter'}</span>
-              <ExternalLink className="w-3 h-3 text-gray-600" />
+              <Twitter className="w-3.5 h-3.5" />
+              <span>{project.twitter_handle || 'TWITTER'}</span>
+              <ExternalLink className="w-3 h-3 text-text-ghost" />
             </a>
           )}
           {project.website_url && (
@@ -141,95 +151,110 @@ export default function ProjectDetailPage() {
               href={project.website_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-cyber-bg-tertiary border border-cyber-border hover:border-cyber-purple transition-all text-sm"
+              className="cyber-btn flex items-center gap-2"
             >
-              <Globe className="w-4 h-4" />
-              <span className="font-mono">Website</span>
-              <ExternalLink className="w-3 h-3 text-gray-600" />
+              <Globe className="w-3.5 h-3.5" />
+              <span>WEBSITE</span>
+              <ExternalLink className="w-3 h-3 text-text-ghost" />
             </a>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* GitHub Metrics */}
-        <div className="cyber-card p-6">
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <Github className="w-5 h-5 text-cyber-cyan" />
-            GitHub Metrics
-          </h2>
-          <div className="grid grid-cols-2 gap-4">
+        <div className="cyber-card p-5 animate-in delay-2">
+          <div className="flex items-center gap-2 mb-4">
+            <Github className="w-4 h-4 text-ice" />
+            <h2 className="text-sm font-semibold tracking-wide">GitHub Metrics</h2>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2.5">
             {[
-              { label: 'Stars', value: project.github_stars, icon: Star },
-              { label: 'Forks', value: project.github_forks, icon: GitCommit },
-              { label: 'Commits (30d)', value: project.github_commits_30d, icon: GitCommit },
-              { label: 'Contributors', value: project.github_contributors, icon: Users },
+              { label: 'STARS', value: project.github_stars, icon: Star, accent: 'text-solar' },
+              { label: 'FORKS', value: project.github_forks, icon: GitCommit, accent: 'text-ice' },
+              { label: 'COMMITS/30D', value: project.github_commits_30d, icon: GitCommit, accent: 'text-neon' },
+              { label: 'CONTRIBUTORS', value: project.github_contributors, icon: Users, accent: 'text-phantom' },
             ].map((metric) => (
-              <div key={metric.label} className="bg-cyber-bg-tertiary rounded-lg p-3 border border-cyber-border">
-                <div className="flex items-center gap-2 mb-1">
-                  <metric.icon className="w-4 h-4 text-gray-500" />
-                  <span className="text-xs text-gray-500">{metric.label}</span>
+              <div key={metric.label} className="bg-deep rounded-md p-3 border border-border-dim">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <metric.icon className={clsx('w-3 h-3', metric.accent)} />
+                  <span className="text-[9px] font-mono text-text-ghost tracking-wider">
+                    {metric.label}
+                  </span>
                 </div>
-                <p className="text-xl font-bold font-mono text-white">
-                  {metric.value ?? '—'}
+                <p className="text-xl font-bold font-mono text-text-primary">
+                  {metric.value ?? '\u2014'}
                 </p>
               </div>
             ))}
           </div>
-          {project.github_language && (
-            <div className="mt-4 flex items-center gap-2">
-              <span className="text-xs text-gray-500">Language:</span>
-              <span className="cyber-badge bg-cyber-cyan/20 text-cyber-cyan border border-cyber-cyan/30">
-                {project.github_language}
-              </span>
-            </div>
-          )}
-          {project.github_created_at && (
-            <div className="mt-2 flex items-center gap-2 text-xs text-gray-500">
-              <Calendar className="w-3 h-3" />
-              <span>Created: {new Date(project.github_created_at).toLocaleDateString()}</span>
+
+          {(project.github_language || project.github_created_at) && (
+            <div className="mt-3 flex items-center gap-4 flex-wrap">
+              {project.github_language && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[9px] font-mono text-text-ghost tracking-wider">LANG:</span>
+                  <span className="cyber-badge bg-ice/10 text-ice border border-ice/20">
+                    {project.github_language}
+                  </span>
+                </div>
+              )}
+              {project.github_created_at && (
+                <div className="flex items-center gap-1.5 text-[11px] font-mono text-text-ghost">
+                  <Calendar className="w-3 h-3" />
+                  <span>Created {new Date(project.github_created_at).toLocaleDateString()}</span>
+                </div>
+              )}
             </div>
           )}
         </div>
 
-        {/* Analysis */}
-        <div className="cyber-card p-6">
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <Shield className="w-5 h-5 text-cyber-green" />
-            AI Analysis
-          </h2>
+        {/* AI Analysis */}
+        <div className="cyber-card p-5 animate-in delay-3">
+          <div className="flex items-center gap-2 mb-4">
+            <Shield className="w-4 h-4 text-neon" />
+            <h2 className="text-sm font-semibold tracking-wide">AI Analysis</h2>
+          </div>
+
           {project.summary ? (
             <div className="space-y-4">
               <div>
-                <h3 className="text-sm text-gray-500 mb-1">Summary</h3>
-                <p className="text-gray-300 text-sm">{project.summary}</p>
+                <h3 className="text-[10px] font-mono text-text-ghost tracking-wider mb-1.5">SUMMARY</h3>
+                <p className="text-text-secondary text-[13px] leading-relaxed">{project.summary}</p>
               </div>
               {project.why_early && (
                 <div>
-                  <h3 className="text-sm text-gray-500 mb-1">Why Early</h3>
-                  <p className="text-gray-300 text-sm whitespace-pre-line">{project.why_early}</p>
+                  <h3 className="text-[10px] font-mono text-text-ghost tracking-wider mb-1.5">EARLY SIGNALS</h3>
+                  <p className="text-text-secondary text-[13px] leading-relaxed whitespace-pre-line">{project.why_early}</p>
                 </div>
               )}
               {project.red_flags && (
                 <div>
-                  <h3 className="text-sm text-cyber-red mb-1">Red Flags</h3>
-                  <p className="text-gray-300 text-sm whitespace-pre-line">{project.red_flags}</p>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <AlertTriangle className="w-3 h-3 text-heat" />
+                    <h3 className="text-[10px] font-mono text-heat tracking-wider">RED FLAGS</h3>
+                  </div>
+                  <p className="text-text-secondary text-[13px] leading-relaxed whitespace-pre-line">{project.red_flags}</p>
                 </div>
               )}
             </div>
           ) : (
-            <div className="text-center py-8">
-              <p className="text-gray-500 font-mono text-sm">NOT YET ANALYZED</p>
-              <p className="text-xs text-gray-600 mt-2">
-                Use the API to generate analysis prompts
+            <div className="text-center py-10">
+              <div className="w-8 h-8 rounded-md border border-border-dim bg-elevated/30 flex items-center justify-center mx-auto mb-3">
+                <Scan className="w-4 h-4 text-border-mid" />
+              </div>
+              <p className="text-text-ghost font-mono text-[11px] tracking-wider">AWAITING ANALYSIS</p>
+              <p className="text-[11px] text-text-ghost/50 mt-1">
+                Generate a prompt via the API to analyze this project
               </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Discovered info */}
-      <div className="text-xs text-gray-600 font-mono flex items-center gap-4">
+      {/* Timestamps */}
+      <div className="text-[10px] text-text-ghost/50 font-mono flex items-center gap-4 animate-in delay-4">
         {project.discovered_at && (
           <span>Discovered: {new Date(project.discovered_at).toLocaleString()}</span>
         )}
