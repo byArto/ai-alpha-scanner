@@ -61,7 +61,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -437,7 +437,7 @@ async def generate_batch_prompt(limit: int = 5, min_score: float = 6.0):
 async def get_scheduler_status():
     """Get scheduler status and jobs"""
     return {
-        "is_running": scheduler._is_running,
+        "running": scheduler._is_running,
         "jobs": scheduler.get_jobs_status()
     }
 

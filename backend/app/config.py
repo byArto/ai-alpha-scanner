@@ -1,6 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import Optional
-import os
+from typing import Optional, List
 
 
 class Settings(BaseSettings):
@@ -10,7 +9,7 @@ class Settings(BaseSettings):
     log_level: str = "DEBUG"
 
     # Database
-    database_url: str = "sqlite+aiosqlite:///../data/alpha_scanner.db"
+    database_url: str = "sqlite+aiosqlite:///./data/alpha_scanner.db"
 
     # GitHub
     github_token: Optional[str] = None
@@ -21,6 +20,13 @@ class Settings(BaseSettings):
 
     # Rate limiting
     requests_per_minute: int = 30
+
+    # CORS
+    cors_origins: str = "http://localhost:3000"
+
+    @property
+    def cors_origins_list(self) -> List[str]:
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
     class Config:
         env_file = ".env"
