@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { Clock, Play, Square, RefreshCw, Zap, Activity, AlertTriangle } from 'lucide-react';
-import { api } from '@/lib/api';
+import { getSchedulerStatus, startScheduler, stopScheduler, runSchedulerNow, triggerCollection } from '@/lib/api';
 import clsx from 'clsx';
 
 interface JobInfo {
@@ -37,7 +37,7 @@ export default function SchedulerPage() {
 
   const loadStatus = useCallback(async () => {
     try {
-      const { data } = await api.get('/api/scheduler/status');
+      const data = await getSchedulerStatus();
       setStatus(data);
     } catch (error) {
       console.error('Failed to load scheduler status:', error);
@@ -55,15 +55,15 @@ export default function SchedulerPage() {
     setActionLoading(action);
     try {
       if (action === 'start') {
-        await api.post('/api/scheduler/start');
+        await startScheduler();
       } else if (action === 'stop') {
-        await api.post('/api/scheduler/stop');
+        await stopScheduler();
       } else if (action === 'run-now') {
-        const { data } = await api.post('/api/scheduler/run-now');
+        const data = await runSchedulerNow();
         setLastResult({ type: 'run-now', data });
       } else if (action.startsWith('collect-')) {
-        const source = action.replace('collect-', '');
-        const { data } = await api.post(`/api/collect/${source}`);
+        const source = action.replace('collect-', '') as 'github' | 'defillama' | 'all';
+        const data = await triggerCollection(source);
         setLastResult({ type: source, data });
       }
       await loadStatus();
