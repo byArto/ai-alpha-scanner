@@ -1,4 +1,5 @@
-from fastapi import FastAPI, Query, Body
+from fastapi import FastAPI, Query, Body, HTTPException, Security, Depends
+from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -62,10 +63,29 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "Authorization"],
 )
+
+
+# ============ Authentication ============
+
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def verify_admin_key(api_key: str = Security(api_key_header)):
+    """Verify admin API key for protected endpoints"""
+    if not settings.admin_api_key:
+        logger.warning("Admin API key not configured - allowing request (INSECURE)")
+        return True
+
+    if api_key != settings.admin_api_key:
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid or missing API key"
+        )
+    return True
 
 
 # ============ Basic Endpoints ============
@@ -87,8 +107,8 @@ async def health_check():
 # ============ Collection Endpoints ============
 
 @app.post("/api/collect/github")
-async def run_github_collection(save_to_db: bool = True):
-    """Run GitHub collection"""
+async def run_github_collection(save_to_db: bool = True, _auth: bool = Depends(verify_admin_key)):
+    """Run GitHub collection (admin only)"""
     collector = GitHubCollector()
     result = await collector.run()
 
@@ -104,8 +124,8 @@ async def run_github_collection(save_to_db: bool = True):
 
 
 @app.post("/api/collect/galxe")
-async def run_galxe_collection(save_to_db: bool = True):
-    """Run Galxe collection"""
+async def run_galxe_collection(save_to_db: bool = True, _auth: bool = Depends(verify_admin_key)):
+    """Run Galxe collection (admin only)"""
     collector = GalxeCollector()
     result = await collector.run()
 
@@ -121,8 +141,8 @@ async def run_galxe_collection(save_to_db: bool = True):
 
 
 @app.post("/api/collect/layer3")
-async def run_layer3_collection(save_to_db: bool = True):
-    """Run Layer3 collection"""
+async def run_layer3_collection(save_to_db: bool = True, _auth: bool = Depends(verify_admin_key)):
+    """Run Layer3 collection (admin only)"""
     collector = Layer3Collector()
     result = await collector.run()
 
@@ -138,8 +158,8 @@ async def run_layer3_collection(save_to_db: bool = True):
 
 
 @app.post("/api/collect/zealy")
-async def run_zealy_collection(save_to_db: bool = True):
-    """Run Zealy collection"""
+async def run_zealy_collection(save_to_db: bool = True, _auth: bool = Depends(verify_admin_key)):
+    """Run Zealy collection (admin only)"""
     collector = ZealyCollector()
     result = await collector.run()
 
@@ -155,8 +175,8 @@ async def run_zealy_collection(save_to_db: bool = True):
 
 
 @app.post("/api/collect/defillama")
-async def run_defillama_collection(save_to_db: bool = True):
-    """Run DeFiLlama collection"""
+async def run_defillama_collection(save_to_db: bool = True, _auth: bool = Depends(verify_admin_key)):
+    """Run DeFiLlama collection (admin only)"""
     collector = DefiLlamaCollector()
     result = await collector.run()
 
@@ -169,8 +189,8 @@ async def run_defillama_collection(save_to_db: bool = True):
 
 
 @app.post("/api/collect/all")
-async def run_all_collections(save_to_db: bool = True):
-    """Run all working collectors (GitHub + DeFiLlama)"""
+async def run_all_collections(save_to_db: bool = True, _auth: bool = Depends(verify_admin_key)):
+    """Run all working collectors (admin only)"""
     results = {}
 
     # GitHub
@@ -201,17 +221,20 @@ async def run_all_collections(save_to_db: bool = True):
 
 @app.get("/api/projects")
 async def get_projects(
-    status: Optional[str] = None,
-    category: Optional[str] = None,
-    source: Optional[str] = None,
-    min_score: float = 0,
-    limit: int = Query(default=50, le=100),
-    offset: int = 0
+    status: Optional[str] = Query(None, pattern="^(new|analyzed|archived|rejected)$"),
+    category: Optional[str] = Query(None, pattern="^(l1|l2|defi|infrastructure|tooling|gaming|nft|social|ai|other)$"),
+    source: Optional[str] = Query(None, pattern="^(github|twitter|galxe|layer3|zealy|manual)$"),
+    min_score: float = Query(0, ge=0, le=10),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(0, ge=0, le=10000)
 ):
     """Get list of projects with filters"""
-    status_enum = ProjectStatus(status) if status else None
-    category_enum = ProjectCategory(category) if category else None
-    source_enum = ProjectSource(source) if source else None
+    try:
+        status_enum = ProjectStatus(status) if status else None
+        category_enum = ProjectCategory(category) if category else None
+        source_enum = ProjectSource(source) if source else None
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid filter value: {e}")
 
     projects = await project_service.get_projects(
         status=status_enum,
@@ -365,8 +388,8 @@ async def generate_analysis_prompt(project_id: int):
 
 
 @app.post("/api/analysis/save/{project_id}")
-async def save_analysis(project_id: int, response_text: str = Body(..., embed=True)):
-    """Parse and save AI analysis response"""
+async def save_analysis(project_id: int, response_text: str = Body(..., embed=True, max_length=50000), _auth: bool = Depends(verify_admin_key)):
+    """Parse and save AI analysis response (admin only)"""
     analyzer = AIAnalyzer()
 
     analysis = analyzer.parse_analysis_response(response_text)
@@ -443,8 +466,8 @@ async def get_scheduler_status():
 
 
 @app.post("/api/scheduler/start")
-async def start_scheduler():
-    """Start the scheduler"""
+async def start_scheduler(_auth: bool = Depends(verify_admin_key)):
+    """Start the scheduler (admin only)"""
     if scheduler._is_running:
         return {"message": "Scheduler already running", "jobs": scheduler.get_jobs_status()}
 
@@ -453,8 +476,8 @@ async def start_scheduler():
 
 
 @app.post("/api/scheduler/stop")
-async def stop_scheduler():
-    """Stop the scheduler"""
+async def stop_scheduler(_auth: bool = Depends(verify_admin_key)):
+    """Stop the scheduler (admin only)"""
     if not scheduler._is_running:
         return {"message": "Scheduler not running"}
 
@@ -463,8 +486,8 @@ async def stop_scheduler():
 
 
 @app.post("/api/scheduler/run-now")
-async def run_collections_now():
-    """Manually trigger all collections"""
+async def run_collections_now(_auth: bool = Depends(verify_admin_key)):
+    """Manually trigger all collections (admin only)"""
     await scheduler.run_all_collections()
     stats = await project_service.get_stats()
     return {"message": "Collections completed", "stats": stats}
