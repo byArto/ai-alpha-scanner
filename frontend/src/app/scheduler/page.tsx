@@ -34,6 +34,7 @@ export default function SchedulerPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<{ type: string; data: CollectionResult } | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const loadStatus = useCallback(async () => {
     try {
@@ -53,6 +54,7 @@ export default function SchedulerPage() {
 
   const handleAction = async (action: string) => {
     setActionLoading(action);
+    setError(null);
     try {
       if (action === 'start') {
         await startScheduler();
@@ -67,8 +69,10 @@ export default function SchedulerPage() {
         setLastResult({ type: source, data });
       }
       await loadStatus();
-    } catch (error) {
-      console.error(`Action ${action} failed:`, error);
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.detail || err?.message || 'Unknown error';
+      setError(`${action} failed: ${errorMsg}`);
+      console.error(`Action ${action} failed:`, err);
     }
     setActionLoading(null);
   };
@@ -92,6 +96,22 @@ export default function SchedulerPage() {
           <span>REFRESH</span>
         </button>
       </div>
+
+      {/* Error display */}
+      {error && (
+        <div className="cyber-card p-4 border-heat/30 bg-heat/5 animate-in">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-heat" />
+            <p className="text-sm text-heat font-mono">{error}</p>
+            <button
+              onClick={() => setError(null)}
+              className="ml-auto text-text-ghost hover:text-text-secondary"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Status card */}
       <div className="cyber-card p-5 animate-in delay-1">
